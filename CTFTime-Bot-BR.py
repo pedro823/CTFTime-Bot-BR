@@ -6,6 +6,19 @@ from datetime import datetime
 from dateutil import tz
 from telepot.loop import MessageLoop
 
+strip_timezone = lambda time_str: time_str[:19]
+
+current_time = lambda: str(int(time.time()))
+
+craft_message_from_ctf = lambda ctf: '''
+%s
+%s
+Inicia em: %s
+Termina em: %s
+''' % (ctf['title'], 
+       ctf['url'], 
+       convert_time(strip_timezone(ctf['start'])), 
+       convert_time(strip_timezone(ctf['finish'])))
 
 def convert_time(time):
     from_zone = tz.gettz('UTC')
@@ -13,46 +26,37 @@ def convert_time(time):
     utc = datetime.strptime(time, '%Y-%m-%dT%H:%M:%S')
     utc = utc.replace(tzinfo=from_zone)
 
-    # Convert o fuso horario
-    brasil = utc.astimezone(to_zone)
-    brasil = brasil.strftime("%d/%m/%Y %H:%M")
-    return brasil
+    # Converts time zone
+    brazil = utc.astimezone(to_zone)
+    brazil = brazil.strftime("%d/%m/%Y %H:%M")
+    return brazil
 
 
 def get_ctfs():
     resp = requests.get(URL, params=PARAMS, headers=HEADERS)
-    data = resp.json()
-    mensagem = '*Próximos CTFs:*\n'
-    for item in data:
-        mensagem += '\n' + item['title']
-        mensagem += '\nURL: ' + item['url']
-        mensagem += '\nInicia em: ' + convert_time(item['start'][:19])
-        mensagem += '\nTermina em: ' + convert_time(item['finish'][:19])
-        mensagem += '\n'
-    return mensagem
+    response_items = resp.json()
+    message = '*Próximos CTFs:*\n'
+    for ctf in response_items:
+        message += craft_message_from_ctf(ctf)
+    return message
 
 
 def handle(msg):
     chat_id = msg['chat']['id']
     command = msg['text']
-    if msg['text']:
-        if '/ctfs' in command[:5]:
-            bot.sendMessage(chat_id, get_ctfs(), parse_mode='Markdown')
-
-
-horario_atual = str(time.time()).split('.')[0]
+    if command and '/ctfs' in command:
+        bot.sendMessage(chat_id, get_ctfs(), parse_mode='Markdown')
 
 URL = 'https://ctftime.org/api/v1/events/?'
 HEADERS = {'User-Agent': 'Mozilla/5.0'}
 PARAMS = dict(
     limit='5',
-    start=horario_atual,
-    finish=str(int(horario_atual) + 2629800)
+    start=current_time(),
+    finish=str(int(current_time()) + 2629800)
 )
+API_KEY = 'Insira sua API key aqui'
 
 with daemon.DaemonContext():
-    bot = telepot.Bot("SUA_BOT_API_AQUI")
-    MessageLoop(bot, handle).run_as_thread()
-    print('Estou escutando ...')
-    while 1:
-        time.sleep(10)
+    bot = telepot.Bot(API_KEY)
+    print('Começando a escutar por requests...')
+    MessageLoop(bot, handle).run_forever()
